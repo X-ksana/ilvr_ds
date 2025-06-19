@@ -284,7 +284,7 @@ class TrainLoop:
                         t_cpu = t.cpu()
                         
                         # Get diffusion parameters for the current timestep
-                        alpha_bar_t = th.from_numpy(self.diffusion.alphas_cumprod[t_cpu.numpy()]).to(dist_util.dev())
+                        alpha_bar_t = th.from_numpy(self.diffusion.alphas_cumprod[t_cpu.numpy()]).float().to(dist_util.dev())
                         sqrt_alpha_bar_t = th.sqrt(alpha_bar_t).view(-1, 1, 1, 1)
                         sqrt_one_minus_alpha_bar_t = th.sqrt(1 - alpha_bar_t).view(-1, 1, 1, 1)
                         
@@ -332,8 +332,8 @@ class TrainLoop:
             self.mp_trainer.backward(loss)
             
             # Force log dump after SSIM calculation
-            if self.step % self.log_interval == 0:
-                logger.dumpkvs()
+            #if self.step % self.log_interval == 0:
+            #    logger.dumpkvs()
 
     def _update_ema(self):
         for rate, params in zip(self.ema_rate, self.ema_params):
