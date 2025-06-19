@@ -8,6 +8,7 @@ import torch.distributed as dist
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 from torch.optim import AdamW
 import wandb
+import torch.nn.functional as F
 
 from . import dist_util, logger
 from .fp16_util import MixedPrecisionTrainer
@@ -62,6 +63,60 @@ def calculate_ssim_batch(img1, img2, data_range=2.0):
     
     return np.mean(ssim_values)
 
+def calculate_mask_metrics(predicted_mask, original_mask):
+    """Calculate mask-specific metrics for validation.
+    
+    Args:
+        predicted_mask: Predicted mask tensor (B, C, H, W)
+        original_mask: Original mask tensor (B, C, H, W)
+    Returns:
+        Dictionary containing mask metrics
+    """
+    # Ensure tensors are on CPU and detached
+    if isinstance(predicted_mask, th.Tensor):
+        predicted_mask = predicted_mask.detach().cpu()
+    if isinstance(original_mask, th.Tensor):
+        original_mask = original_mask.detach().cpu()
+    
+    # Convert to numpy arrays
+    pred_np = predicted_mask.numpy()
+    orig_np = original_mask.numpy()
+    
+    batch_size = pred_np.shape[0]
+    dice_scores = []
+    iou_scores = []
+    
+    for i in range(batch_size):
+        pred_sample = pred_np[i, 0]  # Take first channel
+        orig_sample = orig_np[i, 0]
+        
+        # Calculate Dice coefficient for each class (1, 2, 3)
+        dice_per_class = []
+        iou_per_class = []
+        
+        for class_id in [1, 2, 3]:
+            pred_binary = (pred_sample == class_id).astype(np.float32)
+            orig_binary = (orig_sample == class_id).astype(np.float32)
+            
+            # Dice coefficient
+            intersection = np.sum(pred_binary * orig_binary)
+            union = np.sum(pred_binary) + np.sum(orig_binary)
+            dice = (2.0 * intersection) / (union + 1e-8)
+            dice_per_class.append(dice)
+            
+            # IoU (Intersection over Union)
+            iou = intersection / (union - intersection + 1e-8)
+            iou_per_class.append(iou)
+        
+        # Average across classes
+        dice_scores.append(np.mean(dice_per_class))
+        iou_scores.append(np.mean(iou_per_class))
+    
+    return {
+        'dice_score': np.mean(dice_scores),
+        'iou_score': np.mean(iou_scores)
+    }
+
 class TrainLoop:
     def __init__(
         self,
@@ -113,6 +168,7 @@ class TrainLoop:
         self.last_batch = None
         self.last_prediction = None
         self.ssim_values = []
+        self.validation_metrics = {}
 
         # Add loss tracking
         self.loss_history = []
@@ -276,64 +332,35 @@ class TrainLoop:
             self.last_loss = loss.item()
             self.loss_history.append(self.last_loss)
             
-            # Calculate SSIM for logging (every log_interval steps)
+            # Calculate validation metrics using reconstructed data (every log_interval steps)
             if self.step % self.log_interval == 0:
                 try:
                     with th.no_grad():
-                        # Move timestep tensor to CPU for numpy conversion
-                        t_cpu = t.cpu()
+                        # Compute validation metrics using the reconstructed data from losses
+                        validation_metrics = self.compute_validation_metrics(losses)
                         
-                        # Get diffusion parameters for the current timestep
-                        alpha_bar_t = th.from_numpy(self.diffusion.alphas_cumprod[t_cpu.numpy()]).float().to(dist_util.dev())
-                        sqrt_alpha_bar_t = th.sqrt(alpha_bar_t).view(-1, 1, 1, 1)
-                        sqrt_one_minus_alpha_bar_t = th.sqrt(1 - alpha_bar_t).view(-1, 1, 1, 1)
+                        # Store metrics for logging
+                        self.validation_metrics.update(validation_metrics)
                         
-                        # Create noisy version of x_start using the same process as training
-                        noise = th.randn_like(micro)
-                        x_t = sqrt_alpha_bar_t * micro + sqrt_one_minus_alpha_bar_t * noise
-                        
-                        # Get model prediction (noise prediction)
-                        model_output = self.ddp_model(x_t, t, **micro_cond)
-                        
-                        # Reconstruct predicted clean image
-                        predicted_x0 = (x_t - sqrt_one_minus_alpha_bar_t * model_output) / sqrt_alpha_bar_t
-                        
-                        # Move tensors to CPU before SSIM calculation
-                        micro_cpu = micro.detach().cpu()
-                        predicted_x0_cpu = predicted_x0.detach().cpu()
-                        
-                        # Split into image and mask components for SSIM calculation
-                        if micro_cpu.shape[1] > 1:  # We have both image and mask
-                            original_image = micro_cpu[:, :1]  # First channel is image
-                            predicted_image = predicted_x0_cpu[:, :1]  # First channel prediction
+                        # Log validation metrics
+                        for key, value in validation_metrics.items():
+                            logger.logkv_mean(f"val_{key}", value)
                             
-                            # Calculate SSIM for image component only
-                            ssim_value = calculate_ssim_batch(original_image, predicted_image)
-                            
-                            # Store and log SSIM
-                            self.ssim_values.append(ssim_value)
-                            logger.logkv_mean("ssim", ssim_value)
-                            logger.log(f"Calculated SSIM: {ssim_value}")  # Debug log
-                            
-                        else:  # Only image data
-                            ssim_value = calculate_ssim_batch(micro_cpu, predicted_x0_cpu)
-                            self.ssim_values.append(ssim_value)
-                            logger.logkv_mean("ssim", ssim_value)
-                            logger.log(f"Calculated SSIM: {ssim_value}")  # Debug log
+                        # Store SSIM for checkpointing
+                        if 'ssim' in validation_metrics:
+                            self.ssim_values.append(validation_metrics['ssim'])
                             
                 except Exception as e:
-                    logger.log(f"SSIM calculation failed: {e}")
+                    logger.log(f"Validation metrics calculation failed: {e}")
                     import traceback
-                    logger.log(f"Traceback: {traceback.format_exc()}")  # Full traceback for debugging
+                    logger.log(f"Traceback: {traceback.format_exc()}")
             
             log_loss_dict(
                 self.diffusion, t, {k: v * weights for k, v in losses.items()}
             )
             self.mp_trainer.backward(loss)
             
-            # Force log dump after SSIM calculation
-            #if self.step % self.log_interval == 0:
-            #    logger.dumpkvs()
+           
 
     def _update_ema(self):
         for rate, params in zip(self.ema_rate, self.ema_params):
@@ -393,18 +420,29 @@ class TrainLoop:
             
             # Ensure we're on the main process for logging
             if dist.get_rank() == 0:
-                # Only log if we have metrics to log
-                if hasattr(self, 'ssim_values') and self.ssim_values:
-                    avg_ssim = np.mean(self.ssim_values[-10:])  # Average of last 10 values
-                    logger.logkv("step", current_step)
-                    logger.logkv("samples", (current_step + 1) * self.global_batch)
-                    logger.logkv("avg_ssim", avg_ssim)
-                    logger.logkv("ssim", self.ssim_values[-1])  # Log the most recent SSIM
+                # Log basic training metrics
+                logger.logkv("step", current_step)
+                logger.logkv("samples", (current_step + 1) * self.global_batch)
+                
+                # Log validation metrics if available
+                if self.validation_metrics:
+                    for key, value in self.validation_metrics.items():
+                        logger.logkv(f"val_{key}", value)
                     
-                    # Dump all metrics to both CSV and wandb
-                    logger.dumpkvs()
+                    # Log average SSIM if available
+                    if self.ssim_values:
+                        avg_ssim = np.mean(self.ssim_values[-10:])  # Average of last 10 values
+                        logger.logkv("avg_ssim", avg_ssim)
+                        logger.logkv("ssim", self.ssim_values[-1])  # Log the most recent SSIM
                     
-                    # Clear SSIM values after logging
+                    # Clear validation metrics after logging to prevent duplication
+                    self.validation_metrics = {}
+                
+                # Dump all metrics to both CSV and wandb (this handles the original OpenAI logging)
+                logger.dumpkvs()
+                
+                # Clear SSIM values after logging to prevent accumulation
+                if self.ssim_values:
                     self.ssim_values = []
             
         except Exception as e:
@@ -474,6 +512,55 @@ class TrainLoop:
 
         dist.barrier()
 
+    def compute_validation_metrics(self, losses):
+        """Compute validation metrics using reconstructed data.
+        
+        Args:
+            losses: Dictionary containing loss terms and reconstructed data
+        Returns:
+            Dictionary containing validation metrics
+        """
+        metrics = {}
+        
+        # Check if we have reconstructed data
+        if 'predicted_x0' in losses and 'original_x0' in losses:
+            predicted_x0 = losses['predicted_x0']
+            original_x0 = losses['original_x0']
+            
+            # Split into image and mask components
+            if predicted_x0.shape[1] > 1:  # We have both image and mask
+                predicted_image = predicted_x0[:, :1]
+                predicted_mask = predicted_x0[:, 1:]
+                original_image = original_x0[:, :1]
+                original_mask = original_x0[:, 1:]
+                
+                # Calculate image metrics
+                try:
+                    ssim_value = calculate_ssim_batch(original_image, predicted_image)
+                    metrics['ssim'] = ssim_value
+                except Exception as e:
+                    logger.log(f"SSIM calculation failed: {e}")
+                    metrics['ssim'] = 0.0
+                
+                # Calculate mask metrics
+                try:
+                    mask_metrics = calculate_mask_metrics(predicted_mask, original_mask)
+                    metrics.update(mask_metrics)
+                except Exception as e:
+                    logger.log(f"Mask metrics calculation failed: {e}")
+                    metrics['dice_score'] = 0.0
+                    metrics['iou_score'] = 0.0
+            else:
+                # Only image data
+                try:
+                    ssim_value = calculate_ssim_batch(original_x0, predicted_x0)
+                    metrics['ssim'] = ssim_value
+                except Exception as e:
+                    logger.log(f"SSIM calculation failed: {e}")
+                    metrics['ssim'] = 0.0
+        
+        return metrics
+
 
 def parse_resume_step_from_filename(filename):
     """
@@ -515,6 +602,10 @@ def find_ema_checkpoint(main_checkpoint, step, rate):
 def log_loss_dict(diffusion, ts, losses):
     """Log losses to both console and wandb with proper naming."""
     for key, values in losses.items():
+        # Skip internal keys that shouldn't be logged
+        if key in ['predicted_x0', 'original_x0']:
+            continue
+            
         # Log mean value
         mean_value = values.mean().item()
         logger.logkv_mean(key, mean_value)

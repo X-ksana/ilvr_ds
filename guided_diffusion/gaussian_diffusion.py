@@ -833,46 +833,73 @@ class GaussianDiffusion:
         # Get model predictions for both image and mask
         model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
         
-        # Split model output into image and mask predictions
-        # For cardiac MRI: first 1 channel is image, remaining channels are mask
+        # IMPORTANT: Reconstruct the clean data (x_0) from the predicted noise
+        # This is the key step to ensure losses are based on actual data quality
+        sqrt_recip_alphas_cumprod_t = _extract_into_tensor(
+            self.sqrt_recip_alphas_cumprod, t, x_t.shape
+        )
+        sqrt_recipm1_alphas_cumprod_t = _extract_into_tensor(
+            self.sqrt_recipm1_alphas_cumprod, t, x_t.shape
+        )
+        
+        # Reconstruct predicted clean data: x_0 = (x_t - sqrt(1-α_bar_t) * ε_pred) / sqrt(α_bar_t)
+        predicted_x0 = sqrt_recip_alphas_cumprod_t * x_t - sqrt_recipm1_alphas_cumprod_t * model_output
+        
+        # Split reconstructed output into image and mask predictions
         if x_start.shape[1] > 1:  # We have mask channels
-            image_pred = model_output[:, :1]  # First channel is image
-            mask_pred = model_output[:, 1:]   # Remaining channels are mask
+            predicted_image = predicted_x0[:, :1]  # First channel is image
+            predicted_mask = predicted_x0[:, 1:]   # Remaining channels are mask
         else:  # No mask channels
-            image_pred = model_output
-            mask_pred = None
+            predicted_image = predicted_x0
+            predicted_mask = None
         
         # Initialize dictionary to store different loss terms
         terms = {}
         
-        # Calculate image loss based on model mean type
-        target = {
-            ModelMeanType.PREVIOUS_X: self.q_posterior_mean_variance(
-                x_start=image_start, x_t=x_t[:, :1], t=t
-            )[0],
-            ModelMeanType.START_X: image_start,
-            ModelMeanType.EPSILON: noise[:, :1],
-        }[self.model_mean_type]
-        
-        # Compute MSE loss for image component
-        terms["image_mse"] = mean_flat((target - image_pred) ** 2)
+        # Calculate image loss based on reconstructed data
+        # For epsilon prediction model, we compare reconstructed images directly
+        if self.model_mean_type == ModelMeanType.EPSILON:
+            # Use reconstructed image vs original image
+            terms["image_mse"] = mean_flat((image_start - predicted_image) ** 2)
+        else:
+            # For other model types, use the original target calculation
+            target = {
+                ModelMeanType.PREVIOUS_X: self.q_posterior_mean_variance(
+                    x_start=image_start, x_t=x_t[:, :1], t=t
+                )[0],
+                ModelMeanType.START_X: image_start,
+                ModelMeanType.EPSILON: noise[:, :1],
+            }[self.model_mean_type]
+            terms["image_mse"] = mean_flat((target - predicted_image) ** 2)
         
         # Compute mask loss only if we have mask data
-        if mask_pred is not None and x_start.shape[1] > 1:
-            # Create a mask for regions of interest (categories 1, 2, 3)
-            roi_mask = th.logical_or(
-                th.logical_or(mask_start == 1, mask_start == 2),
-                mask_start == 3
-            ).float()
-            
-            # Compute MSE loss for mask component, focusing on regions of interest
-            mask_loss = mean_flat(((mask_start - mask_pred) ** 2) * roi_mask)
-            
-            # Add a small weight to background/unknown regions to maintain stability
-            bg_mask = th.logical_or(mask_start == 0, mask_start == -1).float()
-            bg_loss = mean_flat(((mask_start - mask_pred) ** 2) * bg_mask) * 0.1
-            
-            terms["mask_loss"] = mask_loss + bg_loss
+        if predicted_mask is not None and x_start.shape[1] > 1:
+            # For epsilon prediction model, compare reconstructed masks directly
+            if self.model_mean_type == ModelMeanType.EPSILON:
+                # Create a mask for regions of interest (categories 1, 2, 3)
+                roi_mask = th.logical_or(
+                    th.logical_or(mask_start == 1, mask_start == 2),
+                    mask_start == 3
+                ).float()
+                
+                # Compute MSE loss for mask component, focusing on regions of interest
+                mask_loss = mean_flat(((mask_start - predicted_mask) ** 2) * roi_mask)
+                
+                # Add a small weight to background/unknown regions to maintain stability
+                bg_mask = th.logical_or(mask_start == 0, mask_start == -1).float()
+                bg_loss = mean_flat(((mask_start - predicted_mask) ** 2) * bg_mask) * 0.1
+                
+                terms["mask_loss"] = mask_loss + bg_loss
+            else:
+                # For other model types, use the original target calculation
+                target = {
+                    ModelMeanType.PREVIOUS_X: self.q_posterior_mean_variance(
+                        x_start=mask_start, x_t=x_t[:, 1:], t=t
+                    )[0],
+                    ModelMeanType.START_X: mask_start,
+                    ModelMeanType.EPSILON: noise[:, 1:],
+                }[self.model_mean_type]
+                terms["mask_loss"] = mean_flat((target - predicted_mask) ** 2)
             
             # Combine losses with equal weighting
             terms["loss"] = terms["image_mse"] + terms["mask_loss"]
@@ -880,6 +907,10 @@ class GaussianDiffusion:
             # No mask data, only use image loss
             terms["mask_loss"] = th.zeros_like(terms["image_mse"])
             terms["loss"] = terms["image_mse"]
+        
+        # Store reconstructed data for validation metrics
+        terms["predicted_x0"] = predicted_x0
+        terms["original_x0"] = x_start
         
         return terms
 
