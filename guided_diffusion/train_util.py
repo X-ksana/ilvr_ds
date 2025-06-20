@@ -481,16 +481,30 @@ class TrainLoop:
                 if not rate:  # Only save best models for non-EMA checkpoints
                     # Save best loss model
                     best_loss_path = bf.join(get_blob_logdir(), 'best_loss_model.pt')
+                    best_loss_ema_path = bf.join(get_blob_logdir(), 'best_loss_ema_model.pt')
                     if not bf.exists(best_loss_path) or current_loss < th.load(best_loss_path)['loss']:
                         with bf.BlobFile(best_loss_path, "wb") as f:
                             th.save(checkpoint, f)
+                        with bf.BlobFile(best_loss_ema_path, "wb") as f:
+                            for i, ema_param in enumerate(self.ema_params):
+                                print(f"Saving EMA with rate {self.ema_rate[i]}")
+                                ema_param_dict = self.mp_trainer.master_params_to_state_dict(ema_param)
+                                th.save(ema_param_dict, f)
+
+                            
                     
                     # Save best SSIM model
                     best_ssim_path = bf.join(get_blob_logdir(), 'best_ssim_model.pt')
+                    best_ssim_ema_path = bf.join(get_blob_logdir(), 'best_ssim_ema_model.pt')
                     if not bf.exists(best_ssim_path) or current_ssim > th.load(best_ssim_path)['ssim']:
                         with bf.BlobFile(best_ssim_path, "wb") as f:
                             th.save(checkpoint, f)
-                
+                        with bf.BlobFile(best_ssim_ema_path, "wb") as f:
+                            for i, ema_param in enumerate(self.ema_params):
+                                print(f"Saving EMA with rate {self.ema_rate[i]}")
+                                ema_param_dict = self.mp_trainer.master_params_to_state_dict(ema_param)
+                                th.save(ema_param_dict, f)
+
                 # Remove old checkpoints (keep only last 3)
                 if not rate:  # Only clean up non-EMA checkpoints
                     checkpoints = sorted([f for f in bf.listdir(get_blob_logdir()) 

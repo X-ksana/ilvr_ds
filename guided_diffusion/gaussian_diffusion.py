@@ -875,18 +875,18 @@ class GaussianDiffusion:
         # Compute mask loss only if we have mask data
         if predicted_mask is not None and x_start.shape[1] > 1:
             # For epsilon prediction model, compare reconstructed masks directly
+            # The mask is normalized to be between -1.0 and 1.0, where -1.0 is background/ unknown, -0.33, 0.33, 1.0 are the three categories:1,2,3
             if self.model_mean_type == ModelMeanType.EPSILON:
                 # Create a mask for regions of interest (categories 1, 2, 3)
-                roi_mask = th.logical_or(
-                    th.logical_or(mask_start == 1, mask_start == 2),
-                    mask_start == 3
-                ).float()
-                
+                roi_mask = (mask_start > -1.0).float()
+
+                # Background is where the mask value is -1.0
+                bg_mask = (mask_start == -1.0).float()
+
                 # Compute MSE loss for mask component, focusing on regions of interest
                 mask_loss = mean_flat(((mask_start - predicted_mask) ** 2) * roi_mask)
                 
                 # Add a small weight to background/unknown regions to maintain stability
-                bg_mask = th.logical_or(mask_start == 0, mask_start == -1).float()
                 bg_loss = mean_flat(((mask_start - predicted_mask) ** 2) * bg_mask) * 0.1
                 
                 terms["mask_loss"] = mask_loss + bg_loss
