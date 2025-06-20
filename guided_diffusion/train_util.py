@@ -302,9 +302,9 @@ class TrainLoop:
             last_batch = (i + self.microbatch) >= batch.shape[0]
             t, weights = self.schedule_sampler.sample(micro.shape[0], dist_util.dev())
 
-            # Ensure consistent tensor types (float32)
+            # Ensure consistent tensor types (float32 for data, long for timesteps)
             micro = micro.float()
-            t = t.float()
+            t = t.long()  # Timesteps must be long/int for indexing
             weights = weights.float()
 
             compute_losses = functools.partial(
