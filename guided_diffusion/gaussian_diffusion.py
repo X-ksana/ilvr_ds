@@ -833,6 +833,17 @@ class GaussianDiffusion:
         # Get model predictions for both image and mask
         model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
         
+        # Handle learn_sigma case: model outputs 2*C channels when learn_sigma=True
+        if self.model_var_type in [ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
+            # Split model output into epsilon prediction and variance prediction
+            B, C = x_t.shape[:2]
+            assert model_output.shape == (B, C * 2, *x_t.shape[2:]), f"Expected model output shape {(B, C * 2, *x_t.shape[2:])}, got {model_output.shape}"
+            epsilon_pred, model_var_values = th.split(model_output, C, dim=1)
+        else:
+            # Standard case: model outputs C channels (epsilon prediction only)
+            epsilon_pred = model_output
+            model_var_values = None
+        
         # IMPORTANT: Reconstruct the clean data (x_0) from the predicted noise
         # This is the key step to ensure losses are based on actual data quality
         sqrt_recip_alphas_cumprod_t = _extract_into_tensor(
@@ -843,7 +854,7 @@ class GaussianDiffusion:
         )
         
         # Reconstruct predicted clean data: x_0 = (x_t - sqrt(1-α_bar_t) * ε_pred) / sqrt(α_bar_t)
-        predicted_x0 = sqrt_recip_alphas_cumprod_t * x_t - sqrt_recipm1_alphas_cumprod_t * model_output
+        predicted_x0 = sqrt_recip_alphas_cumprod_t * x_t - sqrt_recipm1_alphas_cumprod_t * epsilon_pred
         
         # Split reconstructed output into image and mask predictions
         if x_start.shape[1] > 1:  # We have mask channels
@@ -907,6 +918,23 @@ class GaussianDiffusion:
             # No mask data, only use image loss
             terms["mask_loss"] = th.zeros_like(terms["image_mse"])
             terms["loss"] = terms["image_mse"]
+        
+        # Add variational bound loss if using learned variance
+        if self.model_var_type in [ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
+            # Learn the variance using the variational bound, but don't let
+            # it affect our mean prediction.
+            frozen_out = th.cat([epsilon_pred.detach(), model_var_values], dim=1)
+            terms["vb"] = self._vb_terms_bpd(
+                model=lambda *args, r=frozen_out: r,
+                x_start=x_start,
+                x_t=x_t,
+                t=t,
+                clip_denoised=False,
+            )["output"]
+            if self.loss_type == LossType.RESCALED_MSE:
+                # Divide by 1000 for equivalence with initial implementation.
+                # Without a factor of 1/1000, the VB term hurts the MSE term.
+                terms["vb"] *= self.num_timesteps / 1000.0
         
         # Store reconstructed data for validation metrics
         terms["predicted_x0"] = predicted_x0
