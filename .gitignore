@@ -1,0 +1,9 @@
+# Ignore the logs
+log/
+
+# Ignore the data directory
+data/
+
+# Ignore the results directory
+results/
+
