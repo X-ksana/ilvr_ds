@@ -6,7 +6,7 @@
 #SBATCH --mem=128G
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
-#SBATCH --time=0-10:00:00
+#SBATCH --time=0-00:30:00
 #SBATCH --job-name=dm_sample_mask
 #SBATCH --output=sample_mask_%j.log
 #SBATCH --error=sample_mask_%j.err
