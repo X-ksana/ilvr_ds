@@ -128,7 +128,7 @@ def test_sampling_without_mask():
     args = {
         'image_size': 256,
         'in_channels': 2,  # 1 image + 1 mask
-        'out_channels': 2,  # 1 image + 1 mask
+        'out_channels': 4,  # 1 image + 1 mask
         'mask_channels': 1,
         'use_mask': True,  # Important: keep this True for 2-channel model
         'learn_sigma': True,
