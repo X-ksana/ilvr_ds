@@ -8,8 +8,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --time=48:00:00
 #SBATCH --mail-type=ALL
-#SBATCH --output=/users/scxcw/ilvr_ds/logs/3000sample_mask_%j.log
-#SBATCH --error=/users/scxcw/ilvr_ds/logs/3000sample_mask_%j.err
+#SBATCH --output=/users/scxcw/ilvr_ds/logs/1000sample_mask_%j.log
+#SBATCH --error=/users/scxcw/ilvr_ds/logs/1000sample_mask_%j.err
 #SBATCH --mail-user=scxcw@leeds.ac.uk
 
 # Print start time
@@ -30,17 +30,17 @@ else
 fi
 
 # Create log directory if it doesn't exist
-mkdir -p /scratch/scxcw/results/Jun2025_dm_adjustedLoss/log_3000_mask
+mkdir -p /scratch/scxcw/results/Jun2025_dm_adjustedLoss/log_1000_mask
 
 # Run training with correct channel configuration
 # Configuration: 1 image channel + 1 mask channel = 2 input channels
 # With learn_sigma=True: 4 output channels (2 * 2)
 python scripts/image_train.py \
     --data_dir /scratch/scxcw/datasets/cardiac/nnUNet_preprocessed_2/Dataset114_MNMs/nnUNetPlans_2d \
-    --log_dir /scratch/scxcw/results/Jun2025_dm_adjustedLoss/log_3000_mask \
+    --log_dir /scratch/scxcw/results/Jun2025_dm_adjustedLoss/log_1000_mask \
     --attention_resolutions 16 \
     --class_cond False \
-    --diffusion_steps 3000 \
+    --diffusion_steps 1000 \
     --dropout 0.0 \
     --image_size 256 \
     --learn_sigma True \
