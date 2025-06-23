@@ -159,7 +159,7 @@ def test_model_creation():
 
 if __name__ == "__main__":
     # Check the actual model
-    model_path = "results/Jun2025_dm_adjustedLoss/log_1000_mask/best_ssim_ema_model.pt"
+    model_path = "results/log_dm/log_1000_mask/best_ssim_ema_model.pt"
     
     if os.path.exists(model_path):
         check_model_config(model_path)
