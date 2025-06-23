@@ -12,6 +12,9 @@
 #SBATCH --error=sample_mask_%j.err
 
 # Print start time
+
+cd /users/scxcw/ilvr_ds
+
 start_time=`date +%s`
 echo "Job started at: $(date)"
 
