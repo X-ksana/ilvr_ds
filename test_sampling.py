@@ -63,7 +63,6 @@ def test_sampling_configuration():
         # Test with sample data
         batch_size = 1
         sample_shape = (batch_size, 2, 256, 256)  # 2 channels: image + mask
-        
         # Create dummy input data
         x_start = torch.randn(sample_shape)
         t = torch.tensor([50], dtype=torch.long)  # Middle timestep
@@ -128,7 +127,7 @@ def test_sampling_without_mask():
     args = {
         'image_size': 256,
         'in_channels': 2,  # 1 image + 1 mask
-        'out_channels': 4,  # 1 image + 1 mask
+        'out_channels': 2,  # 1 image + 1 mask
         'mask_channels': 1,
         'use_mask': True,  # Important: keep this True for 2-channel model
         'learn_sigma': True,
