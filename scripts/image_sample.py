@@ -74,9 +74,12 @@ def main():
     dist_util.setup_dist()
 
     logger.log("creating model...")
-    model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys())
-    )
+    # Remove mask_dir from model creation arguments since it's not a valid parameter
+    model_args = args_to_dict(args, model_and_diffusion_defaults().keys())
+    if 'mask_dir' in model_args:
+        del model_args['mask_dir']
+    
+    model, diffusion = create_model_and_diffusion(**model_args)
     model.load_state_dict(
         dist_util.load_state_dict(args.model_path, map_location="cpu")
     )
