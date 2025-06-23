@@ -26,11 +26,12 @@ D_values=(2 4 8)
 N_values=(25 50)
 
 # Define the base command and other flags
-# Updated to match the trained model configuration:
-# - in_channels=2 (1 image + 1 mask)
-# - out_channels=2 (1 image + 1 mask) 
-# - mask_channels=1
-# Note: No mask_dir needed for sampling - model generates both image and mask
+# Updated to match the SAVED model configuration:
+# Based on error analysis:
+# - Saved model: input_blocks.0.0.weight: [128, 2, 3, 3] -> 2 input channels
+# - Saved model: out.2.weight: [4, 128, 3, 3] -> 4 output channels (with learn_sigma=True)
+# - Saved model: out.2.bias: [4] -> 4 output channels
+# - This means: in_channels=2, out_channels=2, learn_sigma=True
 MODEL_FLAGS="--attention_resolutions 16 --class_cond False --diffusion_steps 1000 --image_size 256 --learn_sigma True --noise_schedule linear --num_channels 128 --num_head_channels 64 --num_res_blocks 2 --resblock_updown True --use_fp16 False --use_scale_shift_norm True --in_channels 2 --out_channels 2 --mask_channels 1"
 COMMON_ARGS="--batch_size 1 --num_samples 100 --timestep_respacing 100 --model_path results/log_dm/log_1000_mask/best_ssim_ema_model.pt --ref_dir /mnt/scratch/scxcw/datasets/cardiac/nnUNet_preprocessed_2/Dataset027_ACDC/nnUNetPlans_2d --scale 6 --use_mask True"
 

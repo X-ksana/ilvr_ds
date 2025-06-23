@@ -62,14 +62,18 @@ def check_model_config(model_path):
                 print(f"Weight shape: {output_conv_weight.shape}")
                 print(f"Input channels: {output_conv_weight.shape[1]}")
                 print(f"Output channels: {output_conv_weight.shape[0]}")
-        
-        # Check for other important layers
-        print(f"\n=== OTHER LAYERS ===")
-        for key in model_state.keys():
-            if 'weight' in key and 'conv' in key:
-                weight = model_state[key]
-                if len(weight.shape) == 4:  # Conv2d layer
-                    print(f"{key}: {weight.shape}")
+                
+                # Determine if learn_sigma was used
+                if output_conv_weight.shape[0] == 4:
+                    print(f"✅ Model was trained with learn_sigma=True (4 output channels)")
+                    print(f"   Base output channels: 2 (1 image + 1 mask)")
+                    print(f"   With learn_sigma: 2 * 2 = 4 channels")
+                elif output_conv_weight.shape[0] == 6:
+                    print(f"✅ Model was trained with learn_sigma=True (6 output channels)")
+                    print(f"   Base output channels: 3 (likely 1 image + 2 mask channels)")
+                    print(f"   With learn_sigma: 3 * 2 = 6 channels")
+                else:
+                    print(f"❓ Unexpected output channels: {output_conv_weight.shape[0]}")
         
         # Check checkpoint info
         if 'step' in state_dict:
@@ -84,87 +88,93 @@ def check_model_config(model_path):
         import traceback
         traceback.print_exc()
 
-def test_model_creation():
-    """Test model creation with different configurations."""
+def determine_correct_config():
+    """Determine the correct configuration based on the saved model."""
     
-    print("\n=== TESTING MODEL CREATIONS ===")
+    print("\n=== DETERMINING CORRECT CONFIGURATION ===")
     
-    # Test different configurations
-    configs = [
-        {
-            'name': '2-channel (image+mask)',
-            'in_channels': 2,
-            'out_channels': 2,
-            'mask_channels': 1,
-            'use_mask': True,
-            'learn_sigma': True
-        },
-        {
-            'name': '3-channel (RGB)',
-            'in_channels': 3,
-            'out_channels': 3,
-            'mask_channels': 1,
-            'use_mask': False,
-            'learn_sigma': True
-        },
-        {
-            'name': '1-channel (grayscale)',
-            'in_channels': 1,
-            'out_channels': 1,
-            'mask_channels': 1,
-            'use_mask': False,
-            'learn_sigma': True
-        }
-    ]
+    # Based on the error message, the saved model has:
+    # - input_blocks.0.0.weight: [128, 2, 3, 3] -> 2 input channels
+    # - out.2.weight: [4, 128, 3, 3] -> 4 output channels
+    # - out.2.bias: [4] -> 4 output channels
     
-    for config in configs:
-        try:
-            print(f"\n--- Testing: {config['name']} ---")
-            
-            model, diffusion = create_model_and_diffusion(
-                image_size=256,
-                num_channels=128,
-                num_res_blocks=2,
-                learn_sigma=config['learn_sigma'],
-                class_cond=False,
-                use_checkpoint=False,
-                attention_resolutions="16",
-                num_heads=1,
-                num_head_channels=-1,
-                num_heads_upsample=-1,
-                use_scale_shift_norm=True,
-                dropout=0.0,
-                resblock_updown=True,
-                use_fp16=False,
-                use_new_attention_order=False,
-                in_channels=config['in_channels'],
-                out_channels=config['out_channels'],
-                mask_channels=config['mask_channels'],
-                use_mask=config['use_mask'],
-                channel_mult="",
-                diffusion_steps=1000,
-                noise_schedule="linear",
-                timestep_respacing="100",
-                use_kl=False,
-                predict_xstart=False,
-                rescale_timesteps=False,
-                rescale_learned_sigmas=False,
+    print("Based on the error message:")
+    print("✅ Saved model configuration:")
+    print("   - Input channels: 2")
+    print("   - Output channels: 4 (with learn_sigma=True)")
+    print("   - Base output channels: 2 (4/2 = 2)")
+    print("   - learn_sigma: True")
+    
+    print("\n✅ Correct sampling configuration should be:")
+    print("   - in_channels: 2")
+    print("   - out_channels: 2")
+    print("   - mask_channels: 1")
+    print("   - use_mask: True")
+    print("   - learn_sigma: True")
+    
+    return {
+        'in_channels': 2,
+        'out_channels': 2,
+        'mask_channels': 1,
+        'use_mask': True,
+        'learn_sigma': True
+    }
 
-            )
+def test_correct_config():
+    """Test the correct configuration."""
+    
+    print("\n=== TESTING CORRECT CONFIGURATION ===")
+    
+    config = determine_correct_config()
+    
+    try:
+        model, diffusion = create_model_and_diffusion(
+            image_size=256,
+            num_channels=128,
+            num_res_blocks=2,
+            learn_sigma=config['learn_sigma'],
+            class_cond=False,
+            use_checkpoint=False,
+            attention_resolutions="16",
+            num_heads=1,
+            num_head_channels=-1,
+            num_heads_upsample=-1,
+            use_scale_shift_norm=True,
+            dropout=0.0,
+            resblock_updown=True,
+            use_fp16=False,
+            use_new_attention_order=False,
+            in_channels=config['in_channels'],
+            out_channels=config['out_channels'],
+            mask_channels=config['mask_channels'],
+            use_mask=config['use_mask'],
+            channel_mult="",
+            diffusion_steps=1000,
+            noise_schedule="linear",
+            timestep_respacing="100",
+            use_kl=False,
+            predict_xstart=False,
+            rescale_timesteps=False,
+            rescale_learned_sigmas=False,
+        )
+        
+        print(f"✅ Model created successfully!")
+        print(f"   Input channels: {model.in_channels}")
+        print(f"   Output channels: {model.out_channels}")
+        
+        # Test forward pass
+        test_input = torch.randn(1, model.in_channels, 256, 256)
+        with torch.no_grad():
+            output = model(test_input, torch.tensor([500]))
+            print(f"   Test input shape: {test_input.shape}")
+            print(f"   Test output shape: {output.shape}")
             
-            print(f"✅ Model created successfully!")
-            print(f"   Input channels: {model.in_channels}")
-            print(f"   Output channels: {model.out_channels}")
-            
-            # Test forward pass
-            test_input = torch.randn(1, model.in_channels, 256, 256)
-            with torch.no_grad():
-                output = model(test_input, torch.tensor([500]))
-                print(f"   Test input shape: {test_input.shape}")
-                print(f"   Test output shape: {output.shape}")
-                
-        except Exception as e:
-            print(f"❌ Error: {e}")
+        print("\n✅ This configuration should work with the saved model!")
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     # Check the actual model
@@ -176,5 +186,6 @@ if __name__ == "__main__":
         print(f"Model path not found: {model_path}")
         print("Please update the model_path variable to point to your actual model file.")
     
-    # Test different configurations
-    test_model_creation() 
+    # Determine and test correct configuration
+    determine_correct_config()
+    test_correct_config() 

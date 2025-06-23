@@ -126,11 +126,17 @@ def main():
         
         # Determine output shape based on model configuration
         if args.use_mask:
-            # Model outputs both image and mask channels (2 channels total)
-            output_channels = 2  # 1 image + 1 mask
+            # Model outputs both image and mask channels
+            # With learn_sigma=True, the model outputs 2*C channels where C is the base channels
+            # For 2 base channels (1 image + 1 mask), output is 4 channels
+            output_channels = 2  # Base channels: 1 image + 1 mask
+            if args.learn_sigma:
+                output_channels *= 2  # With learn_sigma: 4 channels total
         else:
             # Model outputs only image channels
             output_channels = args.in_channels  # Should be 1 (image only)
+            if args.learn_sigma:
+                output_channels *= 2  # With learn_sigma: 2 channels total
         
         sample = diffusion.p_sample_loop(
             model,
@@ -147,6 +153,13 @@ def main():
         base_name = os.path.splitext(filename)[0]
         
         output = sample[0].cpu().numpy()  # Shape: [C, H, W]
+        
+        # Handle learn_sigma case: model outputs 2*C channels when learn_sigma=True
+        if args.learn_sigma and args.use_mask:
+            # Model outputs 4 channels: [epsilon_image, epsilon_mask, variance_image, variance_mask]
+            # We only need the epsilon predictions (first 2 channels) for reconstruction
+            epsilon_output = output[:2]  # Take first 2 channels: [epsilon_image, epsilon_mask]
+            output = epsilon_output  # Use epsilon predictions for further processing
         
         if args.use_mask:
             # Separate image and mask channels
