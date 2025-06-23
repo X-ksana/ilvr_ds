@@ -8,8 +8,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
 #SBATCH --mail-type=ALL
-#SBATCH --output=/users/scxcw/ilvr_adm/logs/sample_mask_%j.log
-#SBATCH --error=/users/scxcw/ilvr_adm/logs/sample_mask_%j.err
+#SBATCH --output=/users/scxcw/ilvr_ds/logs/sample_mask_%j.log
+#SBATCH --error=/users/scxcw/ilvr_ds/logs/sample_mask_%j.err
 #SBATCH --mail-user=scxcw@leeds.ac.uk
 
 # Print start time
@@ -17,11 +17,17 @@ start_time=`date +%s`
 echo "Job started at: $(date)"
 
 # Change to project directory
-#cd /users/scxcw/ilvr_adm
+cd /users/scxcw/ilvr_ds
 
 # Add current directory to PYTHONPATH
 export PYTHONPATH=$PYTHONPATH:$(pwd)
-export WANDB_API_KEY=b5403bae4b7d752aaf712537f6191ba3db63eace
+
+# Securely load the API key from the local, untracked file
+if [ -f "secrets.sh" ]; then
+    source secrets.sh
+else
+    echo "Warning: secrets.sh not found. WANDB_API_KEY may not be set."
+fi
 
 # Create log directory if it doesn't exist
 # mkdir -p /scratch/scxcw/results/Jun2025_dm_adjustedLoss/log_1000_mask

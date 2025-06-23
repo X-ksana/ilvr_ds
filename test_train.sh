@@ -1,11 +1,17 @@
 #!/bin/bash
 
 # Change to project directory
-cd /users/scxcw/ilvr_adm
+cd /users/scxcw/ilvr_ds
 
 # Add current directory to PYTHONPATH
-export PYTHONPATH=$PYTHONPATH:/users/scxcw/ilvr_adm
-export WANDB_API_KEY=b5403bae4b7d752aaf712537f6191ba3db63eace
+export PYTHONPATH=$PYTHONPATH:/users/scxcw/ilvr_ds
+
+# Securely load the API key from the local, untracked file
+if [ -f "secrets.sh" ]; then
+    source secrets.sh
+else
+    echo "Warning: secrets.sh not found. WANDB_API_KEY may not be set."
+fi
 
 # Create log directory if it doesn't exist
 mkdir -p results/log_dm/log_1000_mask
