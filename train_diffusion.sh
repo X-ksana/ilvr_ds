@@ -17,21 +17,21 @@ start_time=`date +%s`
 echo "Job started at: $(date)"
 
 # Change to project directory
-cd /users/scxcw/ilvr_adm
+#cd /users/scxcw/ilvr_adm
 
 # Add current directory to PYTHONPATH
-export PYTHONPATH=$PYTHONPATH:/users/scxcw/ilvr_adm
+export PYTHONPATH=$PYTHONPATH:$(pwd)
 export WANDB_API_KEY=b5403bae4b7d752aaf712537f6191ba3db63eace
 
 # Create log directory if it doesn't exist
-mkdir -p /scratch/scxcw/results/log_Jun2025_dm/log_1000_mask
+# mkdir -p /scratch/scxcw/results/Jun2025_dm_adjustedLoss/log_1000_mask
 
 # Run training with correct channel configuration
 # Configuration: 1 image channel + 1 mask channel = 2 input channels
 # With learn_sigma=True: 4 output channels (2 * 2)
 python scripts/image_train.py \
     --data_dir /scratch/scxcw/datasets/cardiac/nnUNet_preprocessed_2/Dataset114_MNMs/nnUNetPlans_2d \
-    --log_dir /scratch/scxcw/results/log_Jun2025_dm/log_1000_mask \
+    --log_dir /scratch/scxcw/results/Jun2025_dm_adjustedLoss/log_1000_mask \
     --attention_resolutions 16 \
     --class_cond False \
     --diffusion_steps 1000 \

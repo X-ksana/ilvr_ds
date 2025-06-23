@@ -201,8 +201,8 @@ class GaussianDiffusion:
             noise = th.randn_like(x_start)
 
         # Debugging: Print shapes
-        print(f"Shape of x_start: {x_start.shape}")
-        print(f"Shape of noise: {noise.shape}")
+        # print(f"Shape of x_start: {x_start.shape}")
+        # print(f"Shape of noise: {noise.shape}")
 
         assert noise.shape == x_start.shape, f"Shape mismatch: noise {noise.shape}, x_start {x_start.shape}"
         return (
