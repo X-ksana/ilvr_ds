@@ -140,7 +140,16 @@ def test_model_creation():
                 in_channels=config['in_channels'],
                 out_channels=config['out_channels'],
                 mask_channels=config['mask_channels'],
-                use_mask=config['use_mask']
+                use_mask=config['use_mask'],
+                channel_mult="",
+                diffusion_steps=1000,
+                noise_schedule="linear",
+                timestep_respacing="100",
+                use_kl=False,
+                predict_xstart=False,
+                rescale_timesteps=False,
+                rescale_learned_sigmas=False,
+
             )
             
             print(f"✅ Model created successfully!")
