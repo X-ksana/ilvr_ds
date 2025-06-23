@@ -29,7 +29,7 @@ N_values=(25 50)
 # - mask_channels=1
 # Note: No mask_dir needed for sampling - model generates both image and mask
 MODEL_FLAGS="--attention_resolutions 16 --class_cond False --diffusion_steps 1000 --image_size 256 --learn_sigma True --noise_schedule linear --num_channels 128 --num_head_channels 64 --num_res_blocks 2 --resblock_updown True --use_fp16 False --use_scale_shift_norm True --in_channels 2 --out_channels 2 --mask_channels 1"
-COMMON_ARGS="--batch_size 1 --num_samples 100 --timestep_respacing 100 --model_path results/Jun2025_dm_adjustedLoss/log_1000_mask/best_ssim_ema_model.pt --ref_dir /mnt/scratch/scxcw/datasets/cardiac/nnUNet_preprocessed_2/Dataset998_gMNMs/nnUNetPlans_2d --scale 6 --use_mask True"
+COMMON_ARGS="--batch_size 1 --num_samples 100 --timestep_respacing 100 --model_path results/Jun2025_dm_adjustedLoss/log_1000_mask/best_ssim_ema_model.pt --ref_dir /mnt/scratch/scxcw/datasets/cardiac/nnUNet_preprocessed_2/Dataset027_ACDC/nnUNetPlans_2d --scale 6 --use_mask True"
 
 # Loop over each combination of D and N
 for D in "${D_values[@]}"; do

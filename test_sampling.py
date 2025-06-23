@@ -66,7 +66,7 @@ def test_sampling_configuration():
         
         # Create dummy input data
         x_start = torch.randn(sample_shape)
-        t = torch.tensor([500], dtype=torch.long)  # Middle timestep
+        t = torch.tensor([50], dtype=torch.long)  # Middle timestep
         
         # Test forward pass
         with torch.no_grad():
@@ -227,10 +227,10 @@ def test_data_loading():
         
         # Test data loading configuration
         data_loader = load_data(
-            data_dir="/path/to/your/data",  # Replace with actual path
+            data_dir="/mnt/scratch/scxcw/datasets/cardiac/nnUNet_preprocessed_2/Dataset027_ACDC/nnUNetPlans_2d",  # Replace with actual path
             batch_size=1,
             image_size=256,
-            mask_dir="/path/to/your/masks",  # Replace with actual path
+       #     mask_dir="/path/to/your/masks",  # Replace with actual path
             use_mask=True,
             deterministic=True,
             random_flip=False
