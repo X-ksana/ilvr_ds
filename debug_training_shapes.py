@@ -41,7 +41,7 @@ def debug_tensor_shapes():
         use_fp16=False,
         use_new_attention_order=False,
         in_channels=1,
-        out_channels=2,
+        out_channels=1,
         mask_channels=1,
         use_mask=True,
         channel_mult="",
