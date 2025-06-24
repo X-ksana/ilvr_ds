@@ -40,7 +40,7 @@ def debug_tensor_shapes():
         resblock_updown=True,
         use_fp16=False,
         use_new_attention_order=False,
-        in_channels=2,
+        in_channels=1,
         out_channels=2,
         mask_channels=1,
         use_mask=True,
