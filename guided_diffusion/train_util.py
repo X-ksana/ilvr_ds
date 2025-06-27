@@ -356,7 +356,7 @@ class TrainLoop:
                     logger.log(f"Traceback: {traceback.format_exc()}")
             
             log_loss_dict(
-                self.diffusion, t, {k: v * weights for k, v in losses.items()}
+                self.diffusion, t, {k: v * weights for k, v in losses.items() if k not in ['predicted_x0', 'original_x0'] }
             )
             self.mp_trainer.backward(loss)
             

@@ -60,9 +60,9 @@ def debug_tensor_shapes():
     print(f"   Diffusion learn_sigma: {diffusion.model_var_type}")
     
     # Create a test batch
-    batch_size = 2
-    test_batch = torch.randn(batch_size, 2, 256, 256)  # 2 channels: image + mask
-    test_timesteps = torch.randint(0, 1000, (batch_size,))
+    batch_size = 1
+    test_batch = torch.randn(batch_size, 2, 256, 256)  # 1 channels: image + mask
+    test_timesteps = torch.randint(0, 100, (batch_size,))
     
     print(f"\n=== TEST BATCH SHAPES ===")
     print(f"   Test batch shape: {test_batch.shape}")
